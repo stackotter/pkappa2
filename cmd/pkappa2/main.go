@@ -19,7 +19,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/gopacket/gopacket/pcap"
 	"github.com/gopacket/gopacket/pcapgo"
 	"github.com/gorilla/websocket"
 	"github.com/spq/pkappa2/internal/index"
@@ -421,14 +420,19 @@ func main() {
 		w.Header().Set("Content-Type", "application/vnd.tcpdump.pcap")
 		pcapProducer := pcapgo.NewWriterNanos(w)
 		for i, fn := range usedPcapFiles {
-			handle, err := pcap.OpenOffline(filepath.Join(mgr.PcapDir, fn))
+			handle, err := os.Open(filepath.Join(mgr.PcapDir, fn))
 			if err != nil {
-				http.Error(w, fmt.Sprintf("OpenOffline failed: %v", err), http.StatusInternalServerError)
+				http.Error(w, fmt.Sprintf("Open pcap failed: %v", err), http.StatusInternalServerError)
 				return
 			}
 			defer handle.Close()
+			reader, err := pcapgo.NewReader(handle)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("NewNgReader failed: %v", err), http.StatusInternalServerError)
+				return
+			}
 			if i == 0 {
-				if err := pcapProducer.WriteFileHeader(uint32(handle.SnapLen()), handle.LinkType()); err != nil {
+				if err := pcapProducer.WriteFileHeader(uint32(reader.Snaplen()), reader.LinkType()); err != nil {
 					http.Error(w, fmt.Sprintf("WriteFileHeader failed: %v", err), http.StatusInternalServerError)
 					return
 				}
@@ -436,7 +440,7 @@ func main() {
 			pos := uint64(0)
 			for _, p := range pcapFiles[fn] {
 				for {
-					data, ci, err := handle.ReadPacketData()
+					data, ci, err := reader.ReadPacketData()
 					if err != nil {
 						http.Error(w, fmt.Sprintf("ReadPacketData failed: %v", err), http.StatusInternalServerError)
 						return

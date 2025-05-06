@@ -25,7 +25,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
-	"github.com/gopacket/gopacket/pcap"
 	"github.com/gopacket/gopacket/pcapgo"
 	"github.com/spq/pkappa2/internal/index"
 	"github.com/spq/pkappa2/internal/index/builder"
@@ -2193,19 +2192,20 @@ func (mgr *Manager) newPcapOverIPEndpoint(ctx context.Context, address string) *
 					file.Close()
 				}()
 				defer innerCancel()
-				handle, err := pcap.OpenOfflineFile(file)
+
+				reader, err := pcapgo.NewReader(file)
 				if err != nil {
 					log.Printf("Can't open file descriptor of PCAP-over-IP endpoint %q: %v\n", endpoint.Address, err)
 					return
 				}
-				defer handle.Close()
-				lt := handle.LinkType()
-				sl := handle.SnapLen()
-				log.Printf("Connection to PCAP-over-IP endpoint %q established (using linkType %s and snaplen %d)\n", endpoint.Address, lt.String(), sl)
+
+				lt := reader.LinkType()
+				sl := reader.Snaplen()
+				log.Printf("Connection to PCAP-over-IP endpoint %q established (using linkType %s and snapLength %d)\n", endpoint.Address, lt.String(), sl)
 
 				endpoint.LastConnected = time.Now().UnixNano()
 				for {
-					data, ci, err := handle.ReadPacketData()
+					data, ci, err := reader.ReadPacketData()
 					if err != nil {
 						log.Printf("Error reading packet from PCAP-over-IP endpoint %q: %v\n", endpoint.Address, err)
 						return

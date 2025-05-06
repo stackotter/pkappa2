@@ -2,15 +2,17 @@ package tools
 
 import (
 	"math"
+	"os"
 
 	"github.com/gopacket/gopacket"
-	"github.com/gopacket/gopacket/pcap"
+	"github.com/gopacket/gopacket/pcapgo"
 )
 
 type (
 	SeekablePcapHolder struct {
 		filename    string
-		handle      *pcap.Handle
+		handle      *os.File
+		reader      *pcapgo.NgReader
 		source      *gopacket.PacketSource
 		packetIndex uint64
 	}
@@ -33,12 +35,17 @@ func (s *SeekablePcapHolder) Close() {
 func (s *SeekablePcapHolder) Packet(packetIndex uint64) (gopacket.Packet, error) {
 	if s.packetIndex > packetIndex {
 		s.Close()
-		handle, err := pcap.OpenOffline(s.filename)
+		handle, err := os.Open(s.filename)
+		if err != nil {
+			return nil, err
+		}
+		reader, err := pcapgo.NewNgReader(handle, pcapgo.DefaultNgReaderOptions)
 		if err != nil {
 			return nil, err
 		}
 		s.handle = handle
-		s.source = gopacket.NewPacketSource(handle, handle.LinkType())
+		s.reader = reader
+		s.source = gopacket.NewPacketSource(reader, reader.LinkType())
 		s.packetIndex = 0
 	}
 	for s.packetIndex < packetIndex {
