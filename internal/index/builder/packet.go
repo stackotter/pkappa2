@@ -8,7 +8,7 @@ import (
 
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
-	"github.com/gopacket/gopacket/pcap"
+	"github.com/gopacket/gopacket/pcapgo"
 	pcapmetadata "github.com/spq/pkappa2/internal/tools/pcapMetadata"
 )
 
@@ -52,14 +52,20 @@ func readPackets(pcapDir, pcapFilename string, info *pcapmetadata.PcapInfo) (*pc
 			info.Filesize = uint64(s.Size())
 		}
 	}
-	handle, err := pcap.OpenOffline(filepath.Join(pcapDir, pcapFilename))
+	handle, err := os.Open(filepath.Join(pcapDir, pcapFilename))
 	if err != nil {
 		return nil, nil, err
 	}
 	defer handle.Close()
+
+	reader, err := pcapgo.NewNgReader(handle, pcapgo.DefaultNgReaderOptions)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	packets := []Packet(nil)
 	var decoder gopacket.Decoder
-	switch lt := handle.LinkType(); lt {
+	switch lt := reader.LinkType(); lt {
 	case layers.LinkTypeIPv4:
 		decoder = layers.LayerTypeIPv4
 	case layers.LinkTypeIPv6:
@@ -67,8 +73,9 @@ func readPackets(pcapDir, pcapFilename string, info *pcapmetadata.PcapInfo) (*pc
 	default:
 		decoder = lt
 	}
+
 	for packetIndex := uint64(0); ; packetIndex++ {
-		data, ci, err := handle.ReadPacketData()
+		data, ci, err := reader.ReadPacketData()
 		switch err {
 		case io.EOF:
 			return info, packets, nil
